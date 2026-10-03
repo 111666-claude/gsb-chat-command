@@ -1,8 +1,4 @@
-"""聊天指令分发：别名解析、参数校验、权限与冷却。
-
-缺陷：别名不解析、参数个数不校验、权限不检查、冷却不生效、
-每次执行扫描全部已注册指令。
-"""
+"""聊天指令分发：别名解析、参数校验、权限与冷却。"""
 
 
 class Dispatcher:
@@ -23,17 +19,26 @@ class Dispatcher:
 
     def run(self, player, text, rank, now_ms):
         """执行一条聊天指令，返回结果字符串。"""
-        self.scanned += len(self.commands)
         if not text.startswith("/"):
             return "error:format"
         parts = text[1:].split()
         if not parts:
             return "error:format"
-        name = parts[0]
-        if name not in self.commands:
+        name = self.aliases.get(parts[0], parts[0])
+        self.scanned += 1
+        spec = self.commands.get(name)
+        if spec is None:
             return "error:unknown"
         args = parts[1:]
-        self.last_used[(player, name)] = now_ms
+        if not spec["args_min"] <= len(args) <= spec["args_max"]:
+            return "error:args"
+        if rank < spec["min_rank"]:
+            return "error:denied"
+        key = (player, name)
+        last = self.last_used.get(key)
+        if last is not None and now_ms - last < self.cooldown_ms:
+            return "error:cooldown"
+        self.last_used[key] = now_ms
         return "ok:%s" % name
 
     def scanned_count(self):
